@@ -1,0 +1,1836 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MD2DOCX — Precision Markdown Conversion</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Syne:wght@400;500;600;700;800&display=swap"
+    rel="stylesheet" />
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css" />
+  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+  <script type="module">
+    import { mml2omml } from 'https://cdn.jsdelivr.net/npm/mathml2omml@0.5.0/dist/index.esm.js';
+    window.mml2omml = mml2omml;
+  </script>
+
+  <style>
+    :root {
+      --gold: #d4af37;
+      --gold-dim: #a8892a;
+      --gold-ghost: rgba(212, 175, 55, 0.08);
+      --gold-border: rgba(212, 175, 55, 0.18);
+      --bg: #0a0a0a;
+      --bg-1: #111110;
+      --bg-2: #181817;
+      --bg-3: #1f1f1e;
+      --surface: #252524;
+      --text: #e8e5de;
+      --text-dim: #8a8578;
+      --text-muted: #4a4840;
+      --red: #e05252;
+      --green: #52c97e;
+      --radius: 2px;
+      --transition: 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Syne', sans-serif;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* === NOISE OVERLAY === */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.035'/%3E%3C/svg%3E");
+      pointer-events: none;
+      z-index: 9999;
+      opacity: 0.6;
+    }
+
+    /* === GRID BACKGROUND === */
+    body::after {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(212, 175, 55, 0.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(212, 175, 55, 0.025) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* === HEADER === */
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: rgba(10, 10, 10, 0.92);
+      backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--gold-border);
+      padding: 0 2.5rem;
+      height: 60px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .logo {
+      font-family: 'Space Mono', monospace;
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--gold);
+      letter-spacing: 0.06em;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .logo-dot {
+      width: 6px;
+      height: 6px;
+      background: var(--gold);
+      border-radius: 50%;
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+
+      0%,
+      100% {
+        opacity: 1;
+        transform: scale(1);
+      }
+
+      50% {
+        opacity: 0.4;
+        transform: scale(0.7);
+      }
+    }
+
+    .header-meta {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.6rem;
+      color: var(--text-muted);
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+
+    /* === MAIN LAYOUT === */
+    main {
+      position: relative;
+      z-index: 1;
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 4rem 2.5rem 6rem;
+    }
+
+    /* === HERO === */
+    .hero {
+      margin-bottom: 4rem;
+      animation: fadeUp 0.6s ease both;
+    }
+
+    @keyframes fadeUp {
+      from {
+        opacity: 0;
+        transform: translateY(16px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .hero-eyebrow {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.65rem;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: var(--gold);
+      margin-bottom: 1.2rem;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .hero-eyebrow::before {
+      content: '';
+      display: inline-block;
+      width: 28px;
+      height: 1px;
+      background: var(--gold);
+    }
+
+    h1 {
+      font-size: clamp(2.2rem, 5vw, 3.8rem);
+      font-weight: 800;
+      line-height: 1.06;
+      letter-spacing: -0.03em;
+      color: var(--text);
+      max-width: 720px;
+    }
+
+    h1 em {
+      font-style: normal;
+      color: var(--gold);
+    }
+
+    .hero-sub {
+      margin-top: 1.2rem;
+      color: var(--text-dim);
+      font-size: 0.92rem;
+      font-weight: 400;
+      max-width: 480px;
+      line-height: 1.7;
+    }
+
+    /* === GRID === */
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 400px;
+      gap: 2rem;
+      align-items: start;
+    }
+
+    @media (max-width: 960px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* === PANEL === */
+    .panel {
+      background: var(--bg-1);
+      border: 1px solid rgba(255, 255, 255, 0.04);
+      border-radius: var(--radius);
+      overflow: hidden;
+      animation: fadeUp 0.6s ease both;
+    }
+
+    .panel:nth-child(2) {
+      animation-delay: 0.08s;
+    }
+
+    .panel-header {
+      padding: 1rem 1.4rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--bg-2);
+    }
+
+    .panel-label {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.58rem;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+
+    .panel-badge {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.55rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      padding: 3px 8px;
+      background: var(--gold-ghost);
+      border: 1px solid var(--gold-border);
+      color: var(--gold);
+      border-radius: var(--radius);
+    }
+
+    .panel-body {
+      padding: 1.4rem;
+    }
+
+    /* === DROP ZONE === */
+    .drop-zone {
+      position: relative;
+      border: 1px dashed var(--gold-border);
+      border-radius: var(--radius);
+      min-height: 220px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0.8rem;
+      cursor: pointer;
+      transition: all var(--transition);
+      background: var(--gold-ghost);
+      overflow: hidden;
+    }
+
+    .drop-zone::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(ellipse at center, rgba(212, 175, 55, 0.04) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    .drop-zone:hover,
+    .drop-zone.dragover {
+      border-color: var(--gold);
+      background: rgba(212, 175, 55, 0.12);
+    }
+
+    .drop-zone:hover .dz-icon,
+    .drop-zone.dragover .dz-icon {
+      transform: translateY(-3px);
+      color: var(--gold);
+    }
+
+    .dz-icon {
+      font-size: 2.2rem;
+      transition: all var(--transition);
+      color: var(--gold-dim);
+      line-height: 1;
+    }
+
+    .dz-title {
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--text);
+      letter-spacing: -0.01em;
+    }
+
+    .dz-sub {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.6rem;
+      color: var(--text-dim);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    #file-input {
+      display: none;
+    }
+
+    /* === FILE LOADED STATE === */
+    .file-loaded {
+      display: none;
+      align-items: center;
+      gap: 1rem;
+      padding: 1rem 1.2rem;
+      background: rgba(212, 175, 55, 0.06);
+      border: 1px solid var(--gold-border);
+      border-radius: var(--radius);
+      margin-top: 1rem;
+    }
+
+    .file-loaded.visible {
+      display: flex;
+    }
+
+    .file-loaded-icon {
+      width: 38px;
+      height: 38px;
+      background: var(--gold-ghost);
+      border: 1px solid var(--gold-border);
+      border-radius: var(--radius);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1rem;
+      flex-shrink: 0;
+    }
+
+    .file-loaded-name {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.72rem;
+      color: var(--text);
+      font-weight: 700;
+      word-break: break-all;
+    }
+
+    .file-loaded-meta {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.58rem;
+      color: var(--text-dim);
+      letter-spacing: 0.06em;
+      margin-top: 3px;
+    }
+
+    .file-clear {
+      margin-left: auto;
+      cursor: pointer;
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      transition: color var(--transition);
+      background: none;
+      border: none;
+      line-height: 1;
+      flex-shrink: 0;
+      padding: 4px;
+    }
+
+    .file-clear:hover {
+      color: var(--red);
+    }
+
+    /* === EDITOR === */
+    .editor-wrap {
+      margin-top: 1rem;
+      position: relative;
+    }
+
+    .editor-label {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.56rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 0.5rem;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .editor-label::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: rgba(255, 255, 255, 0.04);
+    }
+
+    #md-editor {
+      width: 100%;
+      min-height: 280px;
+      background: var(--bg);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: var(--radius);
+      color: var(--text);
+      font-family: 'Space Mono', monospace;
+      font-size: 0.78rem;
+      line-height: 1.8;
+      padding: 1rem 1.2rem;
+      resize: vertical;
+      outline: none;
+      transition: border-color var(--transition);
+      tab-size: 2;
+    }
+
+    #md-editor:focus {
+      border-color: var(--gold-border);
+    }
+
+    #md-editor::placeholder {
+      color: var(--text-muted);
+    }
+
+    /* === DIVIDER === */
+    .section-divider {
+      margin: 1.4rem 0;
+      height: 1px;
+      background: rgba(255, 255, 255, 0.04);
+    }
+
+    /* === TOGGLE ROW === */
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.6rem 0;
+    }
+
+
+    .toggle-name {
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--text);
+      letter-spacing: -0.01em;
+    }
+
+    .toggle-desc {
+      font-size: 0.7rem;
+      color: var(--text-dim);
+      margin-top: 2px;
+      line-height: 1.5;
+    }
+
+    /* Toggle switch */
+    .toggle {
+      position: relative;
+      width: 42px;
+      height: 24px;
+      flex-shrink: 0;
+      cursor: pointer;
+    }
+
+    .toggle input {
+      display: none;
+    }
+
+    .toggle-track {
+      position: absolute;
+      inset: 0;
+      background: var(--surface);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 12px;
+      transition: all var(--transition);
+    }
+
+    .toggle-thumb {
+      position: absolute;
+      top: 3px;
+      left: 3px;
+      width: 16px;
+      height: 16px;
+      background: var(--text-muted);
+      border-radius: 50%;
+      transition: all var(--transition);
+    }
+
+    .toggle input:checked~.toggle-track {
+      background: rgba(212, 175, 55, 0.15);
+      border-color: var(--gold-border);
+    }
+
+    .toggle input:checked~.toggle-thumb {
+      left: 21px;
+      background: var(--gold);
+    }
+
+    /* === SELECT === */
+    .select-wrap {
+      position: relative;
+      margin-top: 0.4rem;
+    }
+
+    select {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: var(--radius);
+      color: var(--text);
+      font-family: 'Syne', sans-serif;
+      font-size: 0.82rem;
+      font-weight: 500;
+      padding: 0.65rem 2.5rem 0.65rem 0.9rem;
+      appearance: none;
+      outline: none;
+      cursor: pointer;
+      transition: border-color var(--transition);
+    }
+
+    select:focus,
+    select:hover {
+      border-color: var(--gold-border);
+    }
+
+    .select-arrow {
+      position: absolute;
+      right: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      pointer-events: none;
+      color: var(--gold);
+      font-size: 0.8rem;
+    }
+
+    .field-label {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.58rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      margin-bottom: 0.45rem;
+      display: block;
+    }
+
+    /* === RIGHT PANEL === */
+    .right-col {
+      position: sticky;
+      top: 80px;
+    }
+
+    /* === STATUS BOX === */
+    .status-box {
+      background: var(--bg-2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      border-radius: var(--radius);
+      overflow: hidden;
+      margin-bottom: 1rem;
+    }
+
+    .status-header {
+      padding: 0.9rem 1.2rem;
+      background: var(--bg-3);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--text-muted);
+      flex-shrink: 0;
+      transition: background var(--transition);
+    }
+
+    .status-dot.processing {
+      background: var(--gold);
+      animation: pulse 0.8s ease infinite;
+    }
+
+    .status-dot.done {
+      background: var(--green);
+      animation: none;
+    }
+
+    .status-dot.error {
+      background: var(--red);
+      animation: none;
+    }
+
+    .status-label {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.62rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      flex: 1;
+    }
+
+    .status-tag {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.55rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      background: var(--bg);
+      border: 1px solid rgba(255, 255, 255, 0.04);
+      padding: 2px 7px;
+      border-radius: var(--radius);
+      transition: all var(--transition);
+    }
+
+    .status-tag.ready {
+      color: var(--green);
+      border-color: rgba(82, 201, 126, 0.2);
+      background: rgba(82, 201, 126, 0.06);
+    }
+
+    .status-tag.active {
+      color: var(--gold);
+      border-color: var(--gold-border);
+      background: var(--gold-ghost);
+    }
+
+    .status-tag.err {
+      color: var(--red);
+      border-color: rgba(224, 82, 82, 0.2);
+      background: rgba(224, 82, 82, 0.06);
+    }
+
+    .status-body {
+      padding: 1.2rem;
+    }
+
+    /* Progress bar */
+    .progress-wrap {
+      margin-bottom: 1rem;
+    }
+
+    .progress-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.5rem;
+    }
+
+    .progress-name {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text);
+      letter-spacing: -0.01em;
+      font-family: 'Space Mono', monospace;
+      font-size: 0.7rem;
+      max-width: 200px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .progress-pct {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.9rem;
+      font-weight: 700;
+      color: var(--gold);
+      letter-spacing: -0.03em;
+    }
+
+    .progress-bar {
+      height: 2px;
+      background: rgba(255, 255, 255, 0.04);
+      border-radius: 1px;
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: var(--gold);
+      border-radius: 1px;
+      transition: width 0.3s ease;
+      width: 0%;
+      box-shadow: 0 0 8px rgba(212, 175, 55, 0.5);
+    }
+
+    .progress-step {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.58rem;
+      letter-spacing: 0.1em;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      margin-top: 0.5rem;
+      min-height: 1.2em;
+      transition: color 0.2s;
+    }
+
+    /* === LOG === */
+    .log-box {
+      background: var(--bg);
+      border: 1px solid rgba(255, 255, 255, 0.04);
+      border-radius: var(--radius);
+      padding: 0.7rem 0.9rem;
+      height: 120px;
+      overflow-y: auto;
+      font-family: 'Space Mono', monospace;
+      font-size: 0.6rem;
+      line-height: 1.8;
+    }
+
+    .log-box::-webkit-scrollbar {
+      width: 3px;
+    }
+
+    .log-box::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .log-box::-webkit-scrollbar-thumb {
+      background: var(--surface);
+      border-radius: 2px;
+    }
+
+    .log-entry {
+      color: var(--text-muted);
+      display: block;
+    }
+
+    .log-entry.info {
+      color: var(--text-dim);
+    }
+
+    .log-entry.success {
+      color: var(--green);
+    }
+
+    .log-entry.warn {
+      color: var(--gold);
+    }
+
+    .log-entry.err {
+      color: var(--red);
+    }
+
+    .log-entry::before {
+      content: '› ';
+      color: var(--text-muted);
+    }
+
+    /* === METRICS === */
+    .metrics {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 0.6rem;
+      margin-top: 1rem;
+    }
+
+    .metric {
+      background: var(--bg);
+      border: 1px solid rgba(255, 255, 255, 0.04);
+      padding: 0.7rem 0.8rem;
+      border-radius: var(--radius);
+    }
+
+    .metric-label {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.5rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 0.3rem;
+    }
+
+    .metric-val {
+      font-family: 'Space Mono', monospace;
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--gold);
+      letter-spacing: -0.03em;
+    }
+
+    .metric-val.dim {
+      color: var(--text-dim);
+    }
+
+    /* === CONVERT BUTTON === */
+    .convert-btn {
+      width: 100%;
+      padding: 1rem 1.5rem;
+      background: var(--gold);
+      color: #1a1200;
+      font-family: 'Syne', sans-serif;
+      font-size: 0.78rem;
+      font-weight: 800;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      border: none;
+      border-radius: var(--radius);
+      cursor: pointer;
+      transition: all var(--transition);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      margin-top: 1rem;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .convert-btn::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, transparent 60%);
+      pointer-events: none;
+    }
+
+    .convert-btn:hover {
+      background: #e0c040;
+      transform: translateY(-1px);
+      box-shadow: 0 8px 24px rgba(212, 175, 55, 0.25);
+    }
+
+    .convert-btn:active {
+      transform: translateY(0);
+    }
+
+    .convert-btn:disabled {
+      background: var(--surface);
+      color: var(--text-muted);
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+
+    .convert-btn:disabled::before {
+      display: none;
+    }
+
+    .convert-btn .btn-icon {
+      font-size: 1rem;
+    }
+
+    /* === DOWNLOAD BUTTON === */
+    .download-btn {
+      width: 100%;
+      padding: 0.85rem 1.5rem;
+      background: transparent;
+      color: var(--gold);
+      font-family: 'Syne', sans-serif;
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      border: 1px solid var(--gold-border);
+      border-radius: var(--radius);
+      cursor: pointer;
+      transition: all var(--transition);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      margin-top: 0.6rem;
+      text-decoration: none;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(4px);
+    }
+
+    .download-btn.visible {
+      opacity: 1;
+      pointer-events: all;
+      transform: translateY(0);
+      transition: opacity 0.3s ease, transform 0.3s ease, background var(--transition), color var(--transition);
+    }
+
+    .download-btn:hover {
+      background: var(--gold-ghost);
+    }
+
+    /* === INFO CARDS === */
+    .info-cards {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.6rem;
+      margin-top: 1rem;
+    }
+
+    .info-card {
+      background: var(--bg-1);
+      border: 1px solid rgba(255, 255, 255, 0.04);
+      padding: 0.9rem 1rem;
+      border-radius: var(--radius);
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .info-card-label {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.52rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+
+    .info-card-val {
+      font-family: 'Space Mono', monospace;
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--gold);
+      letter-spacing: -0.04em;
+    }
+
+    /* === FOOTER === */
+    footer {
+      position: relative;
+      z-index: 1;
+      border-top: 1px solid rgba(255, 255, 255, 0.04);
+      padding: 2rem 2.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .footer-logo {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: var(--gold-dim);
+      letter-spacing: 0.1em;
+    }
+
+    .footer-copy {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.58rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+
+    /* === TOAST === */
+    #toast {
+      position: fixed;
+      bottom: 2rem;
+      left: 50%;
+      transform: translateX(-50%) translateY(8px);
+      background: var(--bg-3);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      color: var(--text);
+      font-family: 'Space Mono', monospace;
+      font-size: 0.7rem;
+      padding: 0.7rem 1.2rem;
+      border-radius: var(--radius);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+      z-index: 9999;
+      opacity: 0;
+      pointer-events: none;
+      transition: all 0.25s ease;
+      white-space: nowrap;
+    }
+
+    #toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    #toast.gold {
+      border-color: var(--gold-border);
+      color: var(--gold);
+    }
+
+    #toast.success {
+      border-color: rgba(82, 201, 126, 0.3);
+      color: var(--green);
+    }
+
+    #toast.err {
+      border-color: rgba(224, 82, 82, 0.3);
+      color: var(--red);
+    }
+
+    /* === KEYBOARD HINT === */
+    .kbd {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-family: 'Space Mono', monospace;
+      font-size: 0.56rem;
+      color: var(--text-muted);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 3px;
+      padding: 2px 5px;
+      margin-left: 4px;
+    }
+
+    /* === FEATURE PILLS === */
+    .features {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      margin-top: 1.2rem;
+    }
+
+    .feature-pill {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.56rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      padding: 4px 10px;
+      border-radius: 20px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .feature-pill span {
+      color: var(--gold);
+    }
+
+    /* === SCROLLBAR === */
+    ::-webkit-scrollbar {
+      width: 4px;
+      height: 4px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: var(--surface);
+      border-radius: 2px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--gold-dim);
+    }
+
+    /* === RESPONSIVE === */
+    @media (max-width: 640px) {
+      header {
+        padding: 0 1.2rem;
+      }
+
+      main {
+        padding: 2.5rem 1.2rem 5rem;
+      }
+
+      h1 {
+        font-size: 2rem;
+      }
+
+      .metrics {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      footer {
+        flex-direction: column;
+        gap: 0.5rem;
+        text-align: center;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- HEADER -->
+  <header>
+    <div class="logo">
+      <div class="logo-dot"></div>
+      MD2DOCX
+    </div>
+    <div class="header-meta">Precision Markdown Conversion &nbsp;·&nbsp; v2.4.0</div>
+  </header>
+
+  <!-- MAIN -->
+  <main>
+    <!-- HERO -->
+    <div class="hero">
+      <div class="hero-eyebrow">Engineered Workflow</div>
+      <h1>Transform Markdown into<br /><em>Production-Ready</em> Documents.</h1>
+      <p class="hero-sub">Upload or paste any Markdown file — tables, headings, code blocks, lists — and receive a
+        perfectly formatted .docx file in seconds. No server required.</p>
+      <div class="features">
+        <div class="feature-pill"><span>✓</span> Headings H1–H6</div>
+        <div class="feature-pill"><span>✓</span> Tables</div>
+        <div class="feature-pill"><span>✓</span> Code blocks</div>
+        <div class="feature-pill"><span>✓</span> Bold &amp; Italic</div>
+        <div class="feature-pill"><span>✓</span> Lists</div>
+        <div class="feature-pill"><span>✓</span> Blockquotes</div>
+        <div class="feature-pill"><span>✓</span> Inline code</div>
+        <div class="feature-pill"><span>✓</span> Hyperlinks</div>
+        <div class="feature-pill"><span>✓</span> Strikethrough</div>
+        <div class="feature-pill"><span>✓</span> KaTeX Math</div>
+      </div>
+    </div>
+
+    <!-- MAIN GRID -->
+    <div class="grid">
+
+      <!-- LEFT COLUMN -->
+      <div class="left-col">
+
+        <!-- UPLOAD PANEL -->
+        <div class="panel" style="margin-bottom:1.4rem;">
+          <div class="panel-header">
+            <span class="panel-label">Source Input</span>
+            <span class="panel-badge" id="char-count">0 chars</span>
+          </div>
+          <div class="panel-body">
+
+            <!-- Drop Zone -->
+            <div class="drop-zone" id="drop-zone" onclick="document.getElementById('file-input').click()">
+              <div class="dz-icon">⬆</div>
+              <div class="dz-title">Drop Markdown File</div>
+              <div class="dz-sub">or click to browse &nbsp;·&nbsp; .md .txt accepted</div>
+            </div>
+            <input type="file" id="file-input" accept=".md,.txt,.markdown" />
+
+            <!-- File loaded indicator -->
+            <div class="file-loaded" id="file-loaded">
+              <div class="file-loaded-icon">📄</div>
+              <div>
+                <div class="file-loaded-name" id="file-loaded-name">—</div>
+                <div class="file-loaded-meta" id="file-loaded-meta">—</div>
+              </div>
+              <button class="file-clear" id="file-clear" title="Clear file">✕</button>
+            </div>
+
+            <!-- Editor -->
+            <div class="editor-wrap">
+              <div class="editor-label">Markdown Editor <span class="kbd">Ctrl+Enter to convert</span></div>
+              <textarea id="md-editor"
+                placeholder="# My Document&#10;&#10;Type or paste Markdown here...&#10;&#10;## Features&#10;- **Bold text** and *italic*&#10;- Tables, code blocks, lists&#10;- Everything in one click"></textarea>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- CONFIG PANEL -->
+        <div class="panel">
+          <div class="panel-header">
+            <span class="panel-label">Conversion Parameters</span>
+          </div>
+          <div class="panel-body">
+
+            <div class="toggle-row">
+              <div class="toggle-info">
+                <div class="toggle-name">Automatic Page Breaks</div>
+                <div class="toggle-desc">Insert a page break before every H1 heading.</div>
+              </div>
+              <label class="toggle">
+                <input type="checkbox" id="opt-pagebreaks" />
+                <div class="toggle-track"></div>
+                <div class="toggle-thumb"></div>
+              </label>
+            </div>
+
+            <div class="section-divider"></div>
+
+            <div class="toggle-row">
+              <div class="toggle-info">
+                <div class="toggle-name">Preserve Code Formatting</div>
+                <div class="toggle-desc">Render fenced code blocks with monospace font.</div>
+              </div>
+              <label class="toggle">
+                <input type="checkbox" id="opt-code" checked />
+                <div class="toggle-track"></div>
+                <div class="toggle-thumb"></div>
+              </label>
+            </div>
+
+            <div class="section-divider"></div>
+
+            <div class="toggle-row">
+              <div class="toggle-info">
+                <div class="toggle-name">Render Blockquotes</div>
+                <div class="toggle-desc">Style &gt; quoted text with a left border accent.</div>
+              </div>
+              <label class="toggle">
+                <input type="checkbox" id="opt-blockquotes" checked />
+                <div class="toggle-track"></div>
+                <div class="toggle-thumb"></div>
+              </label>
+            </div>
+
+            <div class="section-divider"></div>
+
+            <div>
+              <label class="field-label" for="opt-template">Output Template</label>
+              <div class="select-wrap">
+                <select id="opt-template">
+                  <option value="academic">Standard Academic Manuscript</option>
+                  <option value="technical">Technical Documentation</option>
+                  <option value="corporate">Corporate Report (Minimal)</option>
+                  <option value="legal">Legal Brief Format</option>
+                </select>
+                <div class="select-arrow">▾</div>
+              </div>
+            </div>
+
+            <div class="section-divider"></div>
+
+            <div>
+              <label class="field-label" for="opt-filename">Output Filename</label>
+              <div class="select-wrap">
+                <input type="text" id="opt-filename" placeholder="document" style="
+                width:100%;background:var(--bg);border:1px solid rgba(255,255,255,0.06);
+                border-radius:var(--radius);color:var(--text);font-family:'Syne',sans-serif;
+                font-size:0.82rem;font-weight:500;padding:0.65rem 0.9rem;outline:none;
+                transition:border-color var(--transition);" onfocus="this.style.borderColor='var(--gold-border)'"
+                  onblur="this.style.borderColor='rgba(255,255,255,0.06)'" />
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+      </div>
+
+      <!-- RIGHT COLUMN -->
+      <div class="right-col">
+
+        <!-- STATUS PANEL -->
+        <div class="status-box">
+          <div class="status-header">
+            <div class="status-dot" id="status-dot"></div>
+            <div class="status-label">Processing Queue</div>
+            <div class="status-tag" id="status-tag">Standby</div>
+          </div>
+          <div class="status-body">
+
+            <!-- Progress -->
+            <div class="progress-wrap">
+              <div class="progress-top">
+                <div class="progress-name" id="progress-name">No file loaded</div>
+                <div class="progress-pct" id="progress-pct">0%</div>
+              </div>
+              <div class="progress-bar">
+                <div class="progress-fill" id="progress-fill"></div>
+              </div>
+              <div class="progress-step" id="progress-step">Awaiting input...</div>
+            </div>
+
+            <!-- Log -->
+            <div class="editor-label" style="margin-bottom:0.4rem;">System Log</div>
+            <div class="log-box" id="log-box">
+              <span class="log-entry">System initialized. Ready for input.</span>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- METRICS -->
+        <div class="metrics">
+          <div class="metric">
+            <div class="metric-label">Words</div>
+            <div class="metric-val dim" id="m-words">0</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">Lines</div>
+            <div class="metric-val dim" id="m-lines">0</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">Sections</div>
+            <div class="metric-val dim" id="m-sections">0</div>
+          </div>
+        </div>
+
+        <!-- CONVERT BUTTON -->
+        <button class="convert-btn" id="convert-btn" onclick="startConversion()">
+          <span class="btn-icon">⚡</span>
+          Convert to DOCX
+        </button>
+
+        <!-- DOWNLOAD BUTTON -->
+        <a class="download-btn" id="download-btn" href="#" download="document.docx">
+          ↓ &nbsp; Download DOCX
+        </a>
+
+        <!-- INFO CARDS -->
+        <div class="info-cards">
+          <div class="info-card">
+            <div class="info-card-label">Engine</div>
+            <div class="info-card-val" style="font-size:0.8rem;color:var(--text-dim);">In-Browser</div>
+          </div>
+          <div class="info-card">
+            <div class="info-card-label">Privacy</div>
+            <div class="info-card-val" style="font-size:0.8rem;color:var(--text-dim);">100% Local</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </main>
+
+  <!-- FOOTER -->
+  <footer>
+    <div class="footer-logo">MD2DOCX</div>
+    <div class="footer-copy">© 2025 &nbsp;·&nbsp; Precision Minimalism &nbsp;·&nbsp; Client-Side Only &nbsp;·&nbsp; Made
+      By Prottay </div>
+  </footer>
+
+  <!-- TOAST -->
+  <div id="toast"></div>
+
+  <!-- ===============================================================
+     DOCX GENERATION ENGINE (Pure JS, no server needed)
+     =============================================================== -->
+  <script>
+    // ============================================================
+    // MINIMAL DOCX BUILDER — Pure JS, creates valid .docx (ZIP)
+    // Uses JSZip (loaded from CDN above)
+    // ============================================================
+
+    const RELS_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>
+</Relationships>`;
+
+    function getContentTypesXml() {
+      return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+  <Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>
+  <Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/>
+  <Override PartName="/word/settings.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml"/>
+  <Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>
+</Types>`;
+    }
+
+    function getWordRelsXml() {
+      return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/>
+  <Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings" Target="settings.xml"/>
+</Relationships>`;
+    }
+
+    const SETTINGS_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:defaultTabStop w:val="720"/>
+  <w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/></w:compat>
+</w:settings>`;
+
+    function latexToOmml(latex, isDisplay) {
+      try {
+        if (typeof katex === 'undefined') throw new Error('KaTeX not loaded');
+        if (typeof mml2omml === 'undefined') {
+          // Fallback if ESM not yet loaded
+          log('  ⚠ Math conversion delayed (loading library)...', 'warn');
+          return `<w:r><w:t>${escXml(latex)}</w:t></w:r>`;
+        }
+
+        const mmlRaw = katex.renderToString(latex, {
+          output: 'mathml',
+          throwOnError: false,
+          displayMode: isDisplay
+        });
+
+        const mmlMatch = mmlRaw.match(/<math[\s\S]*?<\/math>/);
+        if (!mmlMatch) {
+          log('  ⚠ MathML extraction failed for: ' + latex.substring(0, 20) + '...', 'warn');
+          return `<w:r><w:t>${escXml(latex)}</w:t></w:r>`;
+        }
+
+        let mml = mmlMatch[0];
+        // Clean MathML: mml2omml fails on semantics/annotation tags (causes corruption)
+        mml = mml.replace(/<annotation[^>]*>[\s\S]*?<\/annotation>/g, '');
+        mml = mml.replace(/<\/?semantics[^>]*>/g, '');
+        mml = mml.replace(/<mrow\s*\/>/g, '').replace(/<mrow>\s*<\/mrow>/g, '');
+
+        // Decode ALL MathML entities (KaTeX output) using browser's native parser
+        const decoder = document.createElement('textarea');
+        mml = mml.replace(/&[#a-zA-Z0-9]+;?/g, m => {
+          decoder.innerHTML = m;
+          return decoder.value;
+        });
+
+        let omml = mml2omml(mml);
+        // Clean up output
+        omml = omml.replace(/<\?xml[\s\S]*?\?>/g, "").trim();
+        omml = omml.replace(/\s?xmlns(:[mw])?="[^"]*"/g, "").trim();
+
+        // Ensure all tags have m: prefix (critical for Word)
+        omml = omml.replace(/<(\/?)((?!m:)\w+)/g, '<$1m:$2');
+
+        // Wrap in display container if needed
+        if (isDisplay) {
+          return `<m:oMathPara><m:oMathParaPr><m:jc m:val="center"/></m:oMathParaPr>${omml}</m:oMathPara>`;
+        }
+        return omml;
+      } catch (err) {
+        console.error('Math conversion failed:', err);
+        log('  ⚠ Math conversion failed: ' + err.message, 'warn');
+        return `<w:r><w:t>${escXml(latex)}</w:t></w:r>`;
+      }
+    }
+
+    function escXml(s) {
+      if (!s) return "";
+      return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&apos;');
+    }
+
+    function decodeHtmlEntities(text) {
+      if (!text) return "";
+      const decoder = document.createElement('textarea');
+      return text.replace(/&[#a-zA-Z0-9]+;?/g, m => {
+        decoder.innerHTML = m;
+        return decoder.value;
+      });
+    }
+
+    function corePropsXml() {
+      const now = new Date().toISOString();
+      return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties"
+  xmlns:dc="http://purl.org/dc/elements/1.1/"
+  xmlns:dcterms="http://purl.org/dc/terms/"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <dc:creator>MD2DOCX</dc:creator>
+  <dcterms:created xsi:type="dcterms:W3CDTF">${now}</dcterms:created>
+  <dcterms:modified xsi:type="dcterms:W3CDTF">${now}</dcterms:modified>
+</cp:coreProperties>`;
+    }
+
+    function stylesXml(template) {
+      const colors = {
+        academic: { h1: '1a3a6b', h2: '2e5fa8', h3: '4472c4', accent: '2e5fa8', quote: '6a6a6a' },
+        technical: { h1: '1a1a1a', h2: '333333', h3: '555555', accent: 'cc4400', quote: '888888' },
+        corporate: { h1: '002060', h2: '1f4e79', h3: '2e75b6', accent: '1f4e79', quote: '808080' },
+        legal: { h1: '000000', h2: '1a1a1a', h3: '333333', accent: '000000', quote: '555555' },
+      };
+      const c = colors[template] || colors.academic;
+
+      return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+          xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml"
+          xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+          mc:Ignorable="w14">
+  <w:docDefaults>
+    <w:rPrDefault><w:rPr>
+      <w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:cs="Calibri"/>
+      <w:sz w:val="24"/><w:szCs w:val="24"/>
+      <w:lang w:val="en-US"/>
+    </w:rPr></w:rPrDefault>
+    <w:pPrDefault><w:pPr><w:spacing w:after="160" w:line="276" w:lineRule="auto"/></w:pPr></w:pPrDefault>
+  </w:docDefaults>
+
+  <w:style w:type="paragraph" w:default="1" w:styleId="Normal">
+    <w:name w:val="Normal"/>
+    <w:pPr><w:spacing w:after="160" w:line="276" w:lineRule="auto"/></w:pPr>
+    <w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:sz w:val="24"/></w:rPr>
+  </w:style>
+
+  <w:style w:type="paragraph" w:styleId="Heading1">
+    <w:name w:val="heading 1"/>
+    <w:basedOn w:val="Normal"/><w:next w:val="Normal"/>
+    <w:pPr>
+      <w:outlineLvl w:val="0"/>
+      <w:spacing w:before="480" w:after="160"/>
+      <w:keepNext/><w:keepLines/>
+    </w:pPr>
+    <w:rPr>
+      <w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/>
+      <w:b/><w:color w:val="${c.h1}"/>
+      <w:sz w:val="52"/><w:szCs w:val="52"/>
+    </w:rPr>
+  </w:style>
+
+  <w:style w:type="paragraph" w:styleId="Heading2">
+    <w:name w:val="heading 2"/>
+    <w:basedOn w:val="Normal"/><w:next w:val="Normal"/>
+    <w:pPr>
+      <w:outlineLvl w:val="1"/>
+      <w:spacing w:before="360" w:after="120"/>
+      <w:keepNext/><w:keepLines/>
+    </w:pPr>
+    <w:rPr>
+      <w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/>
+      <w:b/><w:color w:val="${c.h2}"/>
+      <w:sz w:val="36"/><w:szCs w:val="36"/>
+    </w:rPr>
+  </w:style>
+
+  <w:style w:type="paragraph" w:styleId="Heading3">
+    <w:name w:val="heading 3"/>
+    <w:basedOn w:val="Normal"/><w:next w:val="Normal"/>
+    <w:pPr>
+      <w:outlineLvl w:val="2"/>
+      <w:spacing w:before="280" w:after="80"/>
+      <w:keepNext/>
+    </w:pPr>
+    <w:rPr>
+      <w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/>
+      <w:b/><w:color w:val="${c.h3}"/>
+      <w:sz w:val="28"/><w:szCs w:val="28"/>
+    </w:rPr>
+  </w:style>
+
+  <w:style w:type="paragraph" w:styleId="CodeBlock">
+    <w:name w:val="Code Block"/>
+    <w:basedOn w:val="Normal"/>
+    <w:pPr>
+      <w:spacing w:before="120" w:after="120" w:line="240" w:lineRule="auto"/>
+      <w:shd w:val="clear" w:color="auto" w:fill="F2F2F2"/>
+      <w:ind w:left="360" w:right="360"/>
+    </w:pPr>
+    <w:rPr>
+      <w:rFonts w:ascii="Courier New" w:hAnsi="Courier New" w:cs="Courier New"/>
+      <w:sz w:val="18"/><w:szCs w:val="18"/>
+      <w:color w:val="333333"/>
+    </w:rPr>
+  </w:style>
+
+  <w:style w:type="paragraph" w:styleId="Blockquote">
+    <w:name w:val="Blockquote"/>
+    <w:basedOn w:val="Normal"/>
+    <w:pPr>
+      <w:spacing w:before="120" w:after="120"/>
+      <w:ind w:left="480" w:right="480"/>
+      <w:pBdr>
+        <w:left w:val="single" w:sz="18" w:space="12" w:color="${c.accent}"/>
+      </w:pBdr>
+    </w:pPr>
+    <w:rPr>
+      <w:i/><w:color w:val="${c.quote}"/>
+    </w:rPr>
+  </w:style>
+
+  <w:style w:type="character" w:styleId="InlineCode">
+    <w:name w:val="Inline Code"/>
+    <w:basedOn w:val="DefaultParagraphFont"/>
+    <w:rPr>
+      <w:rFonts w:ascii="Courier New" w:hAnsi="Courier New" w:cs="Courier New"/>
+      <w:sz w:val="20"/><w:color w:val="c7254e"/>
+      <w:shd w:val="clear" w:color="auto" w:fill="f9f2f4"/>
+    </w:rPr>
+  </w:style>
+
+  <w:style w:type="character" w:styleId="Hyperlink">
+    <w:name w:val="Hyperlink"/>
+    <w:basedOn w:val="DefaultParagraphFont"/>
+    <w:rPr><w:color w:val="${c.accent}"/><w:u w:val="single"/></w:rPr>
+  </w:style>
+
+  <w:style w:type="character" w:styleId="DefaultParagraphFont" w:default="1">
+    <w:name w:val="Default Paragraph Font"/>
+  </w:style>
+
+  <w:style w:type="paragraph" w:styleId="ListParagraph">
+    <w:name w:val="List Paragraph"/>
+    <w:basedOn w:val="Normal"/>
+    <w:pPr><w:ind w:left="720"/></w:pPr>
+  </w:style>
+</w:styles>`;
+    }
+
+    function numberingXml() {
+      return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:abstractNum w:abstractNumId="0">
+    <w:multiLevelType w:val="hybridMultilevel"/>
+    ${[0, 1, 2, 3, 4].map(i => `<w:lvl w:ilvl="${i}">
+      <w:start w:val="1"/><w:numFmt w:val="bullet"/>
+      <w:lvlText w:val="&#x2022;"/>
+      <w:lvlJc w:val="left"/>
+      <w:pPr><w:ind w:left="${720 + i * 360}" w:hanging="360"/></w:pPr>
+      <w:rPr><w:rFonts w:ascii="Symbol" w:hAnsi="Symbol" w:hint="default"/></w:rPr>
+    </w:lvl>`).join('\n')}
+  </w:abstractNum>
+  <w:abstractNum w:abstractNumId="1">
+    <w:multiLevelType w:val="hybridMultilevel"/>
+    ${[0, 1, 2, 3, 4].map(i => `<w:lvl w:ilvl="${i}">
+      <w:start w:val="1"/><w:numFmt w:val="decimal"/>
+      <w:lvlText w:val="%${i + 1}."/>
+      <w:lvlJc w:val="left"/>
+      <w:pPr><w:ind w:left="${720 + i * 360}" w:hanging="360"/></w:pPr>
+    </w:lvl>`).join('\n')}
+  </w:abstractNum>
+  <w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num>
+  <w:num w:numId="2"><w:abstractNumId w:val="1"/></w:num>
+</w:numbering>`;
+    }
+
+    function parseInline(text) {
+
+      const runs = [];
+      let remaining = decodeHtmlEntities(text);
+      const patterns = [
+        { re: /(\$\$[\s\S]+?\$\$|\$[^$]+?\$)/, fn: (m) => latexToOmml(m[0].replace(/^\$\$?|\$\$?$/g, "").trim(), m[0].startsWith("$$")) },
+        { re: /~~(.+?)~~/, fn: (m, g) => `<w:r><w:rPr><w:strike/></w:rPr><w:t xml:space="preserve">${escXml(g[1])}</w:t></w:r>` },
+        { re: /(\*\*\*|___)(.+?)\1/, fn: (m, g) => `<w:r><w:rPr><w:b/><w:i/></w:rPr><w:t xml:space="preserve">${escXml(g[2])}</w:t></w:r>` },
+        { re: /(\*\*|__)(.+?)\1/, fn: (m, g) => `<w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">${escXml(g[2])}</w:t></w:r>` },
+        { re: /(\*|_)(.+?)\1/, fn: (m, g) => `<w:r><w:rPr><w:i/></w:rPr><w:t xml:space="preserve">${escXml(g[2])}</w:t></w:r>` },
+        { re: /`([^`]+)`/, fn: (m, g) => `<w:r><w:rPr><w:rStyle w:val="InlineCode"/></w:rPr><w:t xml:space="preserve">${escXml(g[1])}</w:t></w:r>` },
+        { re: /\[([^\]]+)\]\(([^)]+)\)/, fn: (m, g) => `<w:r><w:rPr><w:rStyle w:val="Hyperlink"/></w:rPr><w:t xml:space="preserve">${escXml(g[1])}</w:t></w:r>` },
+      ];
+
+      while (remaining.length > 0) {
+        let earliest = null, earliestIndex = Infinity, earliestPattern = null;
+        for (const pat of patterns) {
+          const match = pat.re.exec(remaining);
+          if (match && match.index < earliestIndex) {
+            earliest = match; earliestIndex = match.index; earliestPattern = pat;
+          }
+        }
+        if (!earliest) {
+          if (remaining.length > 0) runs.push(`<w:r><w:t xml:space="preserve">${escXml(remaining)}</w:t></w:r>`);
+          break;
+        }
+        if (earliestIndex > 0) runs.push(`<w:r><w:t xml:space="preserve">${escXml(remaining.slice(0, earliestIndex))}</w:t></w:r>`);
+        runs.push(earliestPattern.fn(earliest, earliest));
+        remaining = remaining.slice(earliestIndex + earliest[0].length);
+      }
+      return runs.join('');
+    }
+
+    async function mdToDocxXml(md, opts) {
+      const lines = md.split('\n');
+      const paras = [];
+      let i = 0;
+      function pushPara(xml) { paras.push(xml); }
+      function makePara(styleId, content, extraPPr = '') {
+        const inner = typeof content === 'string' ? parseInline(content) : content;
+        return `<w:p><w:pPr><w:pStyle w:val="${styleId}"/>${extraPPr}</w:pPr>${inner}</w:p>`;
+      }
+      while (i < lines.length) {
+        const line = lines[i];
+        if (line.trim() === '') { i++; continue; }
+        if (/^(-{3,}|\*{3,}|_{3,})$/.test(line.trim())) { pushPara(`<w:p><w:pPr><w:pBdr><w:bottom w:val="single" w:sz="6" w:space="1" w:color="AAAAAA"/></w:pBdr></w:pPr></w:p>`); i++; continue; }
+        if (line.trim().startsWith('$$')) {
+          let mathLines = [line];
+          if (!line.trim().endsWith('$$') || line.trim() === '$$') {
+            i++;
+            while (i < lines.length && !lines[i].trim().endsWith('$$')) { mathLines.push(lines[i]); i++; }
+            if (i < lines.length) { mathLines.push(lines[i]); i++; }
+          } else { i++; }
+          const fullMath = mathLines.join('\n').trim();
+          const ommlPara = latexToOmml(fullMath.replace(/^\$\$?|\$\$?$/g, "").trim(), true);
+          // Centering is now handled inside m:oMathPara via m:oMathParaPr
+          pushPara(`<w:p><w:pPr><w:spacing w:before="240" w:after="240"/></w:pPr>${ommlPara}</w:p>`);
+          continue;
+        }
+        const hm = line.match(/^(#{1,6})\s+(.*)/);
+        if (hm) {
+          const lvl = hm[1].length;
+          const style = ['Heading1', 'Heading2', 'Heading3', 'Heading4', 'Heading5', 'Heading6'][lvl - 1];
+          let extra = (lvl === 1 && opts.pageBreaks && paras.length > 0) ? '<w:pageBreakBefore/>' : '';
+          pushPara(makePara(style, hm[2].trim(), extra));
+          i++; continue;
+        }
+        if (line.match(/^```/)) {
+          i++; const codeLines = [];
+          while (i < lines.length && !lines[i].match(/^```/)) { codeLines.push(lines[i]); i++; }
+          i++; if (opts.code) { for (const cl of codeLines) pushPara(`<w:p><w:pPr><w:pStyle w:val="CodeBlock"/></w:pPr><w:r><w:t xml:space="preserve">${escXml(cl || ' ')}</w:t></w:r></w:p>`); if (codeLines.length === 0) pushPara(`<w:p><w:pPr><w:pStyle w:val="CodeBlock"/></w:pPr><w:r><w:t> </w:t></w:r></w:p>`); }
+          continue;
+        }
+        if (line.startsWith('>') && opts.blockquotes) {
+          const bqLines = [];
+          while (i < lines.length && lines[i].startsWith('>')) { bqLines.push(lines[i].replace(/^>\s?/, '')); i++; }
+          pushPara(makePara('Blockquote', bqLines.join(' ')));
+          continue;
+        }
+        if (line.includes('|') && lines[i + 1] && /^\|?[\s\-:|]+\|/.test(lines[i + 1])) {
+          const tableLines = [];
+          while (i < lines.length && lines[i].includes('|')) { tableLines.push(lines[i]); i++; }
+          pushPara(buildTable(tableLines));
+          continue;
+        }
+        if (line.match(/^(\s*)([-*+])\s+/)) {
+          while (i < lines.length && lines[i].match(/^(\s*)([-*+])\s+/)) {
+            const m = lines[i].match(/^(\s*)([-*+])\s+(.*)/);
+            const lvl = Math.min(Math.floor(m[1].length / 2), 4);
+            pushPara(`<w:p><w:pPr><w:pStyle w:val="ListParagraph"/><w:numPr><w:ilvl w:val="${lvl}"/><w:numId w:val="1"/></w:numPr><w:ind w:left="${720 + lvl * 360}" w:hanging="360"/></w:pPr>${parseInline(m[3])}</w:p>`);
+            i++;
+          }
+          continue;
+        }
+        if (line.match(/^(\s*)\d+\.\s+/)) {
+          while (i < lines.length && lines[i].match(/^(\s*)\d+\.\s+/)) {
+            const m = lines[i].match(/^(\s*)\d+\.\s+(.*)/);
+            const lvl = Math.min(Math.floor(m[1].length / 2), 4);
+            pushPara(`<w:p><w:pPr><w:pStyle w:val="ListParagraph"/><w:numPr><w:ilvl w:val="${lvl}"/><w:numId w:val="2"/></w:numPr><w:ind w:left="${720 + lvl * 360}" w:hanging="360"/></w:pPr>${parseInline(m[2])}</w:p>`);
+            i++;
+          }
+          continue;
+        }
+        const paraLines = [lines[i]]; i++;
+        while (i < lines.length && lines[i].trim() !== '' && !lines[i].match(/^#{1,6}\s/) && !(lines[i].startsWith('>') && opts.blockquotes) && !lines[i].match(/^(\s*)([-*+])\s+/) && !lines[i].match(/^(\s*)\d+\.\s+/) && !lines[i].match(/^```/) && !lines[i].includes('|') && !/^(-{3,}|\*{3,}|_{3,})$/.test(lines[i].trim())) {
+          paraLines.push(lines[i]); i++;
+        }
+        pushPara(makePara('Normal', paraLines.join(' ')));
+        if (i % 50 === 0) await new Promise(r => setTimeout(r, 0));
+      }
+      return paras.join('\n');
+    }
+
+    function buildDocumentXml(bodyContent) {
+      return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+  xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"
+  xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+  xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"
+  xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+  xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">
+  <w:body>${bodyContent}<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1800"/></w:sectPr></w:body>
+</w:document>`;
+    }
+
+    async function generateDocx(md, opts, template) {
+      log('  - Parsing Markdown to OMML...', 'info');
+      const bodyContent = await mdToDocxXml(md, opts);
+      const zip = new JSZip();
+      zip.file('_rels/.rels', RELS_XML);
+      zip.file('[Content_Types].xml', getContentTypesXml());
+      zip.file('word/document.xml', buildDocumentXml(bodyContent));
+      zip.file('word/styles.xml', stylesXml(template));
+      zip.file('word/numbering.xml', numberingXml());
+      zip.file('word/settings.xml', SETTINGS_XML);
+      zip.file('word/_rels/document.xml.rels', getWordRelsXml());
+      zip.file('docProps/core.xml', corePropsXml());
+      log('  - Generating ZIP package...', 'info');
+      return await zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', compression: "DEFLATE" });
+    }
+
+    let currentFile = null, downloadUrl = null;
+    const editor = document.getElementById('md-editor'), dropZone = document.getElementById('drop-zone');
+    const fileInput = document.getElementById('file-input'), fileLoaded = document.getElementById('file-loaded');
+    const fileLoadedName = document.getElementById('file-loaded-name'), fileLoadedMeta = document.getElementById('file-loaded-meta');
+    const fileClear = document.getElementById('file-clear'), convertBtn = document.getElementById('convert-btn');
+    const downloadBtn = document.getElementById('download-btn'), logBox = document.getElementById('log-box');
+    const progressFill = document.getElementById('progress-fill'), progressPct = document.getElementById('progress-pct');
+    const progressName = document.getElementById('progress-name'), progressStep = document.getElementById('progress-step');
+    const statusDot = document.getElementById('status-dot'), statusTag = document.getElementById('status-tag');
+
+    function log(msg, type = '') {
+      const entry = document.createElement('span'); entry.className = `log-entry ${type}`; entry.textContent = msg;
+      logBox.appendChild(entry); logBox.appendChild(document.createElement('br')); logBox.scrollTop = logBox.scrollHeight;
+    }
+    function setProgress(pct, step) {
+      progressFill.style.width = pct + '%'; progressPct.textContent = pct + '%'; if (step) progressStep.textContent = step;
+    }
+    function setStatus(state) {
+      statusDot.className = 'status-dot ' + (state === 'processing' ? 'processing' : state === 'done' ? 'done' : state === 'error' ? 'error' : '');
+      statusTag.className = 'status-tag ' + (state === 'processing' ? 'active' : state === 'done' ? 'ready' : state === 'error' ? 'err' : '');
+      statusTag.textContent = state === 'processing' ? 'Processing' : state === 'done' ? 'Complete' : state === 'error' ? 'Error' : 'Standby';
+    }
+    function updateMetrics() {
+      const text = editor.value;
+      const words = text.trim() ? text.trim().split(/\s+/).length : 0;
+      document.getElementById('m-words').textContent = words.toLocaleString();
+      document.getElementById('m-lines').textContent = text.split('\n').length.toLocaleString();
+      document.getElementById('m-sections').textContent = (text.match(/^#{1,3}\s/gm) || []).length;
+      document.getElementById('char-count').textContent = text.length.toLocaleString() + ' chars';
+    }
+    function showToast(msg, type = '') {
+      const t = document.getElementById('toast'); t.textContent = msg; t.className = 'show ' + type;
+      setTimeout(() => { t.className = ''; }, 2800);
+    }
+
+    function loadFile(file) {
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        editor.value = e.target.result; currentFile = file;
+        fileLoaded.classList.add('visible'); fileLoadedName.textContent = file.name;
+        fileLoadedMeta.textContent = (file.size / 1024).toFixed(1) + ' KB';
+        progressName.textContent = file.name; updateMetrics(); log('File loaded: ' + file.name, 'info');
+        setProgress(0, 'File ready.');
+      };
+      reader.readAsText(file);
+    }
+
+    fileInput.addEventListener('change', (e) => { if (e.target.files[0]) loadFile(e.target.files[0]); });
+    fileClear.addEventListener('click', () => {
+      editor.value = ''; currentFile = null; fileLoaded.classList.remove('visible'); fileInput.value = ''; updateMetrics();
+      progressName.textContent = 'No file loaded'; setProgress(0, 'Awaiting input...');
+      downloadBtn.classList.remove('visible'); if (downloadUrl) { URL.revokeObjectURL(downloadUrl); downloadUrl = null; }
+      setStatus('');
+    });
+    dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+    dropZone.addEventListener('drop', (e) => { e.preventDefault(); dropZone.classList.remove('dragover'); const f = e.dataTransfer.files[0]; if (f) loadFile(f); });
+    editor.addEventListener('input', updateMetrics);
+
+    convertBtn.addEventListener('click', startConversion);
+
+    async function startConversion() {
+      const md = editor.value.trim();
+      if (!md) { showToast('Add Markdown first.', 'err'); return; }
+      convertBtn.disabled = true; setStatus('processing');
+      const filename = (document.getElementById('opt-filename').value.trim() || (currentFile ? currentFile.name.replace(/\.(md|txt)$/i, '') : 'doc')) + '.docx';
+      try {
+        setProgress(10, 'Preparing...');
+        const blob = await generateDocx(md, { pageBreaks: document.getElementById('opt-pagebreaks').checked, code: document.getElementById('opt-code').checked, blockquotes: document.getElementById('opt-blockquotes').checked }, document.getElementById('opt-template').value);
+        downloadUrl = URL.createObjectURL(blob); downloadBtn.href = downloadUrl; downloadBtn.download = filename; downloadBtn.classList.add('visible');
+        setProgress(100, 'Complete ✓'); setStatus('done'); log('Done!', 'success');
+      } catch (err) {
+        setStatus('error'); log('ERROR: ' + err.message, 'err'); showToast('Error: ' + err.message, 'err');
+      } finally { convertBtn.disabled = false; }
+    }
+    updateMetrics(); log('Engine ready.', 'success');
+  </script>
+</body>
+
+</html>
