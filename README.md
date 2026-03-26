@@ -5,7 +5,9 @@
 
 **MD2DOCX** is a modern, browser-based tool for converting Markdown documents to Microsoft Word (.docx) format with high fidelity. No server required — everything runs locally in your browser.
 
-![MD2DOCX Preview](https://md-2-docx.vercel.app)
+[![Deployed on Vercel](https://img.shields.io/badge/Deployed%20on-Vercel-black?style=for-the-badge&logo=vercel)](https://md-2-docx.vercel.app)
+
+[**Try MD2DOCX Live**](https://md-2-docx.vercel.app)
 
 ## Features
 
