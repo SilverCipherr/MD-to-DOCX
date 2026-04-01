@@ -1648,6 +1648,53 @@
       return runs.join('');
     }
 
+    function buildTable(tableLines) {
+      // Parse header and data rows (skip separator line)
+      const parseRow = line => line.replace(/^\|/, '').replace(/\|$/, '').split('|').map(c => c.trim());
+      const headers = parseRow(tableLines[0]);
+      const colCount = headers.length;
+      // Calculate column width (page width 12240 - left 1800 - right 1440 = 9000 twips usable)
+      const colW = Math.floor(9000 / colCount);
+      const dataRows = tableLines.slice(2).map(parseRow); // skip separator line [1]
+
+      // Table borders
+      const border = `<w:top w:val="single" w:sz="4" w:space="0" w:color="AAAAAA"/>
+        <w:bottom w:val="single" w:sz="4" w:space="0" w:color="AAAAAA"/>
+        <w:left w:val="single" w:sz="4" w:space="0" w:color="AAAAAA"/>
+        <w:right w:val="single" w:sz="4" w:space="0" w:color="AAAAAA"/>
+        <w:insideH w:val="single" w:sz="4" w:space="0" w:color="AAAAAA"/>
+        <w:insideV w:val="single" w:sz="4" w:space="0" w:color="AAAAAA"/>`;
+
+      let xml = `<w:tbl>
+        <w:tblPr>
+          <w:tblStyle w:val="TableGrid"/>
+          <w:tblW w:w="0" w:type="auto"/>
+          <w:tblBorders>${border}</w:tblBorders>
+          <w:tblLook w:val="04A0" w:firstRow="1" w:lastRow="0" w:firstColumn="1" w:lastColumn="0" w:noHBand="0" w:noVBand="1"/>
+        </w:tblPr>
+        <w:tblGrid>${headers.map(() => `<w:gridCol w:w="${colW}"/>`).join('')}</w:tblGrid>`;
+
+      // Header row
+      xml += `<w:tr>`;
+      for (const h of headers) {
+        xml += `<w:tc><w:tcPr><w:shd w:val="clear" w:color="auto" w:fill="E8E8E8"/></w:tcPr>
+          <w:p><w:pPr><w:spacing w:after="0"/></w:pPr><w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">${escXml(h)}</w:t></w:r></w:p></w:tc>`;
+      }
+      xml += `</w:tr>`;
+
+      // Data rows
+      for (const row of dataRows) {
+        xml += `<w:tr>`;
+        for (let c = 0; c < colCount; c++) {
+          const cellText = (c < row.length ? row[c] : '');
+          xml += `<w:tc><w:tcPr></w:tcPr><w:p><w:pPr><w:spacing w:after="0"/></w:pPr>${parseInline(cellText)}</w:p></w:tc>`;
+        }
+        xml += `</w:tr>`;
+      }
+      xml += `</w:tbl>`;
+      return xml;
+    }
+
     async function mdToDocxXml(md, opts) {
       const lines = md.split('\n');
       const paras = [];
