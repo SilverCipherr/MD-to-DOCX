@@ -4,6 +4,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![GitHub Stars](https://img.shields.io/github/stars/SilverCipherr/MD-to-DOCX?style=social)](https://github.com/SilverCipherr/MD-to-DOCX)
+
 [![Deployed on Vercel](https://img.shields.io/badge/Deployed%20on-Vercel-black?style=for-the-badge&logo=vercel)](https://md-2-docx.vercel.app)
 
 **Transform Markdown into production-ready documents — entirely in your browser.**  
@@ -47,12 +48,21 @@ The new **output format switcher** lets you choose between DOCX and PDF before c
 
 ---
 
+## ✦ What's Fixed — DOCX MS Word Compatibility
+
+> **v2.5.1 resolves DOCX file corruption errors in Microsoft Word.**
+
+Previously, the generated DOCX files were missing specific XML namespaces (`w14`, `w15`) and extended properties (`app.xml`) required by modern versions of Microsoft Word (2010, 2013, Office 365). 
+
+- **100% Native MS Word Support** — The DOCX generation engine has been updated to strictly adhere to the `officeDocument` schema, ensuring files open flawlessly in Microsoft Word without triggering the "file is corrupt and cannot be opened" or "recovery" prompts.
+
+---
+
 ## Features
 
 ### Core Conversion
 
 - **Dual Output Formats** — Export to `.docx` (Microsoft Word) **or** `.pdf` with one click
-- **Strict MS Word Compatibility** — Generated DOCX files open perfectly in Microsoft Word 2010+ and Office 365 without recovery prompts
 - **Full Markdown Parsing** — Headings H1–H6, bold, italic, strikethrough, inline code, links
 - **Code Blocks** — Fenced blocks with monospace rendering and language label support
 - **Tables** — Full GFM table support with header styling and alternating row shading
