@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>MD2DOCX — Precision Markdown Conversion</title>
+  <title>MD2DOCX — Precision Markdown Conversion · DOCX & PDF</title>
   <link rel="icon" type="image/png" href="favicon.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link
@@ -12,6 +12,7 @@
     rel="stylesheet" />
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css" />
   <script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
   <script type="module">
@@ -800,6 +801,46 @@
       color: var(--text-dim);
     }
 
+    /* === OUTPUT FORMAT TABS === */
+    .format-tabs {
+      display: flex;
+      gap: 0;
+      margin-bottom: 1rem;
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    .format-tab {
+      flex: 1;
+      padding: 0.55rem 0.8rem;
+      background: var(--bg-2);
+      border: none;
+      color: var(--text-muted);
+      font-family: 'Space Mono', monospace;
+      font-size: 0.6rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: all var(--transition);
+      position: relative;
+    }
+
+    .format-tab:not(:last-child) {
+      border-right: 1px solid rgba(255,255,255,0.06);
+    }
+
+    .format-tab.active {
+      background: var(--gold-ghost);
+      color: var(--gold);
+      border-bottom: 2px solid var(--gold);
+    }
+
+    .format-tab:hover:not(.active) {
+      background: var(--bg-3);
+      color: var(--text-dim);
+    }
+
     /* === CONVERT BUTTON === */
     .convert-btn {
       width: 100%;
@@ -1290,16 +1331,27 @@
           </div>
         </div>
 
+        <!-- OUTPUT FORMAT TABS -->
+        <div class="format-tabs">
+          <button class="format-tab active" id="tab-docx" onclick="selectFormat('docx')">⬡ &nbsp; DOCX</button>
+          <button class="format-tab" id="tab-pdf" onclick="selectFormat('pdf')">⬡ &nbsp; PDF</button>
+        </div>
+
         <!-- CONVERT BUTTON -->
         <button class="convert-btn" id="convert-btn" onclick="startConversion()">
           <span class="btn-icon">⚡</span>
-          Convert to DOCX
+          <span id="convert-btn-label">Convert to DOCX</span>
         </button>
 
-        <!-- DOWNLOAD BUTTON -->
+        <!-- DOWNLOAD BUTTON (DOCX) -->
         <a class="download-btn" id="download-btn" href="#" download="document.docx">
           ↓ &nbsp; Download DOCX
         </a>
+
+        <!-- DOWNLOAD BUTTON (PDF) -->
+        <button class="download-btn" id="download-pdf-btn" onclick="triggerPdfDownload()">
+          ↓ &nbsp; Download PDF
+        </button>
 
         <!-- INFO CARDS -->
         <div class="info-cards">
@@ -1803,7 +1855,471 @@
       return await zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', compression: "DEFLATE" });
     }
 
+    // ============================================================
+    // PDF GENERATION ENGINE — Pure client-side via jsPDF
+    // ============================================================
+
+    let _pdfBlob = null;
+
+    function triggerPdfDownload() {
+      if (!_pdfBlob) return;
+      const filename = (document.getElementById('opt-filename').value.trim() ||
+        (currentFile ? currentFile.name.replace(/\.(md|txt)$/i, '') : 'doc')) + '.pdf';
+      const url = URL.createObjectURL(_pdfBlob);
+      const a = document.createElement('a');
+      a.href = url; a.download = filename; a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+    }
+
+    async function generatePdf(md, opts) {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({ unit: 'pt', format: 'letter', compress: true });
+
+      // ── Palette ──────────────────────────────────────────────
+      const C = {
+        h1:    [26,  58, 107],   // deep navy
+        h2:    [46,  95, 168],
+        h3:    [68, 114, 196],
+        body:  [30,  30,  30],
+        dim:   [90,  90,  90],
+        code:  [50,  50,  50],
+        codeBg:[242, 242, 242],
+        quote: [100, 100, 100],
+        rule:  [180, 180, 180],
+        link:  [46,  95, 168],
+        accent:[212, 175,  55],
+        white: [255, 255, 255],
+        headerBg:[26, 58, 107],
+      };
+
+      const PAGE_W  = doc.internal.pageSize.getWidth();   // 612 pt
+      const PAGE_H  = doc.internal.pageSize.getHeight();  // 792 pt
+      const MARGIN  = { top: 60, bottom: 50, left: 60, right: 60 };
+      const COL_W   = PAGE_W - MARGIN.left - MARGIN.right;
+
+      let y = MARGIN.top;
+
+      function newPageIfNeeded(needed = 20) {
+        if (y + needed > PAGE_H - MARGIN.bottom) {
+          doc.addPage();
+          y = MARGIN.top;
+          return true;
+        }
+        return false;
+      }
+
+      function setFont(style = 'normal', size = 11, colorArr = C.body) {
+        doc.setFontSize(size);
+        doc.setTextColor(...colorArr);
+        switch (style) {
+          case 'bold':       doc.setFont('helvetica', 'bold');       break;
+          case 'italic':     doc.setFont('helvetica', 'italic');     break;
+          case 'bolditalic': doc.setFont('helvetica', 'bolditalic'); break;
+          case 'mono':       doc.setFont('courier',   'normal');     break;
+          default:           doc.setFont('helvetica', 'normal');     break;
+        }
+      }
+
+      // Render inline-styled segments into a single line
+      // Returns an array of {text, style, color, link} segments
+      function parseInlineSegments(raw) {
+        const segs = [];
+        let rem = raw;
+        const patterns = [
+          { re: /\*\*\*(.+?)\*\*\*/,  style: 'bolditalic', color: C.body },
+          { re: /___(.+?)___/,        style: 'bolditalic', color: C.body },
+          { re: /\*\*(.+?)\*\*/,      style: 'bold',       color: C.body },
+          { re: /__(.+?)__/,          style: 'bold',       color: C.body },
+          { re: /\*(.+?)\*/,          style: 'italic',     color: C.body },
+          { re: /_(.+?)_/,            style: 'italic',     color: C.body },
+          { re: /~~(.+?)~~/,          style: 'strike',     color: C.dim  },
+          { re: /`([^`]+)`/,          style: 'mono',       color: C.code },
+          { re: /\[([^\]]+)\]\(([^)]+)\)/, style: 'link', color: C.link },
+        ];
+        while (rem.length > 0) {
+          let earliest = null, eidx = Infinity, epat = null;
+          for (const p of patterns) {
+            const m = p.re.exec(rem);
+            if (m && m.index < eidx) { earliest = m; eidx = m.index; epat = p; }
+          }
+          if (!earliest) { segs.push({ text: rem, style: 'normal', color: C.body }); break; }
+          if (eidx > 0) segs.push({ text: rem.slice(0, eidx), style: 'normal', color: C.body });
+          if (epat.style === 'link') {
+            segs.push({ text: earliest[1], style: 'normal', color: C.link, underline: true });
+          } else if (epat.style === 'strike') {
+            segs.push({ text: earliest[1], style: 'normal', color: C.dim, strike: true });
+          } else {
+            segs.push({ text: epat.style === 'mono' ? earliest[1] : earliest[1], style: epat.style, color: epat.color });
+          }
+          rem = rem.slice(eidx + earliest[0].length);
+        }
+        return segs;
+      }
+
+      // Measure width of a segment
+      function segWidth(seg, size) {
+        setFont(seg.style === 'link' ? 'normal' : seg.style, size);
+        return doc.getTextWidth(seg.text);
+      }
+
+      // Word-wrap inline segments into lines, each line is array of segments
+      function wrapSegments(segs, maxW, size) {
+        const lines = [[]];
+        let lineW = 0;
+        for (const seg of segs) {
+          const words = seg.text.split(/(\s+)/);
+          for (let wi = 0; wi < words.length; wi++) {
+            const word = words[wi];
+            if (!word) continue;
+            const wSeg = { ...seg, text: word };
+            const wW = segWidth(wSeg, size);
+            if (lineW + wW > maxW && lineW > 0 && word.trim()) {
+              lines.push([]);
+              lineW = 0;
+            }
+            const curLine = lines[lines.length - 1];
+            if (curLine.length > 0 && curLine[curLine.length - 1].style === seg.style &&
+                curLine[curLine.length - 1].color === seg.color) {
+              curLine[curLine.length - 1].text += word;
+            } else {
+              curLine.push({ ...seg, text: word });
+            }
+            lineW += wW;
+          }
+        }
+        return lines.filter(l => l.length > 0 && l.some(s => s.text.trim()));
+      }
+
+      // Render one wrapped line of segments at y, return line height
+      function renderSegLine(segLine, x0, size, lineH) {
+        let x = x0;
+        for (const seg of segLine) {
+          if (!seg.text) continue;
+          setFont(seg.style === 'link' ? 'normal' : seg.style, size, seg.color);
+          doc.text(seg.text, x, y);
+          const w = doc.getTextWidth(seg.text);
+          if (seg.underline) {
+            doc.setDrawColor(...seg.color);
+            doc.setLineWidth(0.4);
+            doc.line(x, y + 1.5, x + w, y + 1.5);
+          }
+          if (seg.strike) {
+            doc.setDrawColor(...seg.color);
+            doc.setLineWidth(0.4);
+            doc.line(x, y - size * 0.3, x + w, y - size * 0.3);
+          }
+          x += w;
+        }
+        return lineH;
+      }
+
+      // Render a full paragraph of inline markdown text
+      function renderInlinePara(text, { size = 11, color = C.body, lineH = 16, x = MARGIN.left, maxW = COL_W, paddingBottom = 8 } = {}) {
+        const segs = parseInlineSegments(text);
+        const wrappedLines = wrapSegments(segs, maxW, size);
+        for (const segLine of wrappedLines) {
+          newPageIfNeeded(lineH + 4);
+          renderSegLine(segLine, x, size, lineH);
+          y += lineH;
+        }
+        y += paddingBottom;
+      }
+
+      // ── Page header decoration ────────────────────────────────
+      function drawPageHeader() {
+        doc.setFillColor(...C.headerBg);
+        doc.rect(0, 0, PAGE_W, 34, 'F');
+        doc.setFontSize(9); doc.setFont('helvetica', 'bold');
+        doc.setTextColor(...C.accent);
+        doc.text('MD2DOCX', MARGIN.left, 22);
+        doc.setFont('helvetica', 'normal'); doc.setTextColor(...[200,200,200]);
+        const ts = new Date().toLocaleDateString('en-US', { year:'numeric', month:'short', day:'numeric' });
+        doc.text(ts, PAGE_W - MARGIN.right - doc.getTextWidth(ts), 22);
+        doc.setDrawColor(...C.accent); doc.setLineWidth(0.8);
+        doc.line(MARGIN.left, 34, PAGE_W - MARGIN.right, 34);
+      }
+
+      drawPageHeader();
+      y = 56; // below header
+
+      // ── Parse & render each line ─────────────────────────────
+      const lines = md.split('\n');
+      let i = 0;
+
+      while (i < lines.length) {
+        const line = lines[i];
+
+        // Blank line
+        if (line.trim() === '') { y += 6; i++; continue; }
+
+        // Horizontal rule
+        if (/^(-{3,}|\*{3,}|_{3,})$/.test(line.trim())) {
+          newPageIfNeeded(16);
+          doc.setDrawColor(...C.rule); doc.setLineWidth(0.5);
+          doc.line(MARGIN.left, y - 4, MARGIN.left + COL_W, y - 4);
+          y += 10; i++; continue;
+        }
+
+        // Display math (skip with placeholder)
+        if (line.trim().startsWith('$$')) {
+          let mathLines = [line];
+          if (!line.trim().endsWith('$$') || line.trim() === '$$') {
+            i++;
+            while (i < lines.length && !lines[i].trim().endsWith('$$')) { mathLines.push(lines[i]); i++; }
+            if (i < lines.length) { mathLines.push(lines[i]); i++; }
+          } else { i++; }
+          newPageIfNeeded(24);
+          setFont('italic', 10, C.dim);
+          doc.text('[Math expression]', MARGIN.left + COL_W / 2 - 40, y);
+          y += 20; continue;
+        }
+
+        // Headings
+        const hm = line.match(/^(#{1,6})\s+(.*)/);
+        if (hm) {
+          const lvl = hm[1].length;
+          const sizes  = [26, 20, 16, 14, 12, 11];
+          const colors = [C.h1, C.h2, C.h3, C.body, C.body, C.body];
+          const lineHs = [36, 28, 24, 20, 18, 16];
+          const pads   = [14, 10,  8,  6,  4,  4];
+          const sz = sizes[lvl - 1];
+          const cl = colors[lvl - 1];
+          const lh = lineHs[lvl - 1];
+          const pb = pads[lvl - 1];
+
+          if (lvl === 1 && opts.pageBreaks && i > 0) {
+            doc.addPage();
+            drawPageHeader();
+            y = 56;
+          }
+
+          // Word-wrap heading text
+          setFont('bold', sz, cl);
+          const hTextLines = doc.splitTextToSize(hm[2].trim(), COL_W);
+          const hTotalH = hTextLines.length * lh + pb + (lvl <= 2 ? 10 : 0);
+          newPageIfNeeded(hTotalH + 6);
+
+          if (lvl <= 2) {
+            // Accent underline for H1/H2
+            y += 4;
+            for (let hl = 0; hl < hTextLines.length; hl++) {
+              doc.text(hTextLines[hl], MARGIN.left, y);
+              if (hl < hTextLines.length - 1) y += lh;
+            }
+            y += 6;
+            doc.setDrawColor(...(lvl === 1 ? C.accent : C.h2));
+            doc.setLineWidth(lvl === 1 ? 1.5 : 0.6);
+            doc.line(MARGIN.left, y, MARGIN.left + COL_W, y);
+            y += pb;
+          } else {
+            for (let hl = 0; hl < hTextLines.length; hl++) {
+              doc.text(hTextLines[hl], MARGIN.left, y);
+              if (hl < hTextLines.length - 1) y += lh;
+            }
+            y += lh + pb - 10;
+          }
+          i++; continue;
+        }
+
+        // Fenced code block
+        if (line.match(/^```/)) {
+          i++;
+          const codeLines = [];
+          while (i < lines.length && !lines[i].match(/^```/)) { codeLines.push(lines[i]); i++; }
+          i++;
+          if (opts.code) {
+            const blockH = Math.max(codeLines.length, 1) * 13 + 16;
+            newPageIfNeeded(blockH);
+            doc.setFillColor(...C.codeBg);
+            doc.roundedRect(MARGIN.left, y - 10, COL_W, blockH, 2, 2, 'F');
+            doc.setDrawColor(220, 220, 220); doc.setLineWidth(0.3);
+            doc.roundedRect(MARGIN.left, y - 10, COL_W, blockH, 2, 2, 'S');
+            // left accent bar
+            doc.setFillColor(...C.accent);
+            doc.rect(MARGIN.left, y - 10, 3, blockH, 'F');
+            setFont('mono', 8.5, C.code);
+            for (const cl of codeLines) {
+              newPageIfNeeded(13);
+              doc.text(cl || ' ', MARGIN.left + 10, y);
+              y += 13;
+            }
+            y += 10;
+          }
+          continue;
+        }
+
+        // Blockquote
+        if (line.startsWith('>') && opts.blockquotes) {
+          const bqLines = [];
+          while (i < lines.length && lines[i].startsWith('>')) { bqLines.push(lines[i].replace(/^>\s?/, '')); i++; }
+          const bqText = bqLines.join(' ');
+          const segs = parseInlineSegments(bqText);
+          const wrapped = wrapSegments(segs, COL_W - 28, 10);
+          const bqH = wrapped.length * 14 + 16;
+          newPageIfNeeded(bqH);
+          doc.setFillColor(248, 246, 240);
+          doc.rect(MARGIN.left, y - 10, COL_W, bqH, 'F');
+          doc.setFillColor(...C.accent);
+          doc.rect(MARGIN.left, y - 10, 3, bqH, 'F');
+          for (const wl of wrapped) {
+            renderSegLine(wl, MARGIN.left + 14, 10, 14);
+            y += 14;
+          }
+          y += 8; continue;
+        }
+
+        // Table
+        if (line.includes('|') && lines[i + 1] && /^\|?[\s\-:|]+\|/.test(lines[i + 1])) {
+          const tableLines = [];
+          while (i < lines.length && lines[i].includes('|')) { tableLines.push(lines[i]); i++; }
+          const parseRow = r => r.replace(/^\|/, '').replace(/\|$/, '').split('|').map(c => c.trim());
+          const headers = parseRow(tableLines[0]);
+          const dataRows = tableLines.slice(2).map(parseRow);
+          const cols = headers.length;
+          const cw = COL_W / cols;
+          const cellPad = 5;
+          const baseRowH = 18;
+          const minEstH = (dataRows.length + 1) * baseRowH + 20;
+          newPageIfNeeded(minEstH);
+
+          // Pre-wrap all cells so we know row heights
+          setFont('normal', 9, C.body);
+          const wrappedHeader = headers.map(h => {
+            setFont('bold', 9, C.white);
+            return doc.splitTextToSize(h || '', cw - cellPad * 2);
+          });
+          const headerRowH = Math.max(...wrappedHeader.map(l => l.length)) * 13 + 10;
+
+          const wrappedData = dataRows.map(row =>
+            row.map((cell, c) => {
+              setFont('normal', 9, C.body);
+              return doc.splitTextToSize(cell || '', cw - cellPad * 2);
+            })
+          );
+          const dataRowHs = wrappedData.map(row =>
+            Math.max(...row.map(l => l.length)) * 13 + 10
+          );
+
+          const tableTopY = y - 12; // top of header bg rect
+
+          // Header row
+          doc.setFillColor(...C.h1);
+          doc.rect(MARGIN.left, tableTopY, COL_W, headerRowH, 'F');
+          setFont('bold', 9, C.white);
+          for (let c = 0; c < cols; c++) {
+            const lines2 = wrappedHeader[c];
+            let ty = tableTopY + 12;
+            for (const ln of lines2) {
+              doc.text(ln, MARGIN.left + c * cw + cellPad, ty);
+              ty += 13;
+            }
+          }
+          y = tableTopY + headerRowH;
+
+          // Data rows
+          for (let ri = 0; ri < dataRows.length; ri++) {
+            const rh = dataRowHs[ri];
+            newPageIfNeeded(rh + 4);
+            if (ri % 2 === 0) {
+              doc.setFillColor(245, 247, 250);
+              doc.rect(MARGIN.left, y, COL_W, rh, 'F');
+            }
+            setFont('normal', 9, C.body);
+            for (let c = 0; c < cols; c++) {
+              const lines2 = wrappedData[ri][c] || [''];
+              let ty = y + 12;
+              for (const ln of lines2) {
+                doc.text(ln, MARGIN.left + c * cw + cellPad, ty);
+                ty += 13;
+              }
+            }
+            y += rh;
+          }
+
+          // Table outer border (anchored from tableTopY)
+          doc.setDrawColor(180, 180, 180); doc.setLineWidth(0.5);
+          doc.rect(MARGIN.left, tableTopY, COL_W, y - tableTopY, 'S');
+          // Header bottom separator
+          doc.setLineWidth(0.8);
+          doc.line(MARGIN.left, tableTopY + headerRowH, MARGIN.left + COL_W, tableTopY + headerRowH);
+
+          y += 12; continue;
+        }
+
+        // Bullet list
+        if (line.match(/^(\s*)([-*+])\s+/)) {
+          while (i < lines.length && lines[i].match(/^(\s*)([-*+])\s+/)) {
+            const m = lines[i].match(/^(\s*)([-*+])\s+(.*)/);
+            const lvl = Math.min(Math.floor(m[1].length / 2), 4);
+            const indent = MARGIN.left + 10 + lvl * 16;
+            newPageIfNeeded(16);
+            doc.setFillColor(...C.accent);
+            doc.circle(indent - 5, y - 3.5, 2, 'F');
+            renderInlinePara(m[3], { size: 10.5, x: indent, maxW: COL_W - 10 - lvl * 16, lineH: 14, paddingBottom: 2 });
+            i++;
+          }
+          y += 4; continue;
+        }
+
+        // Ordered list
+        if (line.match(/^(\s*)\d+\.\s+/)) {
+          let num = 1;
+          while (i < lines.length && lines[i].match(/^(\s*)\d+\.\s+/)) {
+            const m = lines[i].match(/^(\s*)\d+\.\s+(.*)/);
+            const lvl = Math.min(Math.floor(m[1].length / 2), 4);
+            const indent = MARGIN.left + 18 + lvl * 16;
+            newPageIfNeeded(16);
+            setFont('bold', 10, C.accent);
+            doc.text(num + '.', MARGIN.left + lvl * 16, y);
+            renderInlinePara(m[2], { size: 10.5, x: indent, maxW: COL_W - 18 - lvl * 16, lineH: 14, paddingBottom: 2 });
+            num++; i++;
+          }
+          y += 4; continue;
+        }
+
+        // Normal paragraph (merge continuation lines)
+        const paraLines = [lines[i]]; i++;
+        while (i < lines.length && lines[i].trim() !== '' &&
+          !lines[i].match(/^#{1,6}\s/) && !lines[i].startsWith('>') &&
+          !lines[i].match(/^(\s*)([-*+])\s+/) && !lines[i].match(/^(\s*)\d+\.\s+/) &&
+          !lines[i].match(/^```/) && !lines[i].includes('|') &&
+          !/^(-{3,}|\*{3,}|_{3,})$/.test(lines[i].trim())) {
+          paraLines.push(lines[i]); i++;
+        }
+        renderInlinePara(paraLines.join(' '), { size: 11, lineH: 16, paddingBottom: 8 });
+      }
+
+      // ── Page numbers ─────────────────────────────────────────
+      const totalPages = doc.internal.getNumberOfPages();
+      for (let p = 1; p <= totalPages; p++) {
+        doc.setPage(p);
+        setFont('normal', 8, C.dim);
+        const pageStr = `${p} / ${totalPages}`;
+        doc.text(pageStr, PAGE_W / 2 - doc.getTextWidth(pageStr) / 2, PAGE_H - 22);
+        doc.setDrawColor(...C.rule); doc.setLineWidth(0.3);
+        doc.line(MARGIN.left, PAGE_H - 28, PAGE_W - MARGIN.right, PAGE_H - 28);
+      }
+
+      return doc.output('blob');
+    }
+
+    // ============================================================
+
     let currentFile = null, downloadUrl = null;
+    let currentFormat = 'docx';
+
+    function selectFormat(fmt) {
+      currentFormat = fmt;
+      document.getElementById('tab-docx').classList.toggle('active', fmt === 'docx');
+      document.getElementById('tab-pdf').classList.toggle('active', fmt === 'pdf');
+      document.getElementById('convert-btn-label').textContent =
+        fmt === 'pdf' ? 'Convert to PDF' : 'Convert to DOCX';
+      document.getElementById('download-btn').classList.remove('visible');
+      document.getElementById('download-pdf-btn').classList.remove('visible');
+      _pdfBlob = null;
+      if (downloadUrl) { URL.revokeObjectURL(downloadUrl); downloadUrl = null; }
+    }
+
     const editor = document.getElementById('md-editor'), dropZone = document.getElementById('drop-zone');
     const fileInput = document.getElementById('file-input'), fileLoaded = document.getElementById('file-loaded');
     const fileLoadedName = document.getElementById('file-loaded-name'), fileLoadedMeta = document.getElementById('file-loaded-meta');
@@ -1869,12 +2385,34 @@
       const md = editor.value.trim();
       if (!md) { showToast('Add Markdown first.', 'err'); return; }
       convertBtn.disabled = true; setStatus('processing');
-      const filename = (document.getElementById('opt-filename').value.trim() || (currentFile ? currentFile.name.replace(/\.(md|txt)$/i, '') : 'doc')) + '.docx';
+      const baseFilename = document.getElementById('opt-filename').value.trim() ||
+        (currentFile ? currentFile.name.replace(/\.(md|txt)$/i, '') : 'doc');
+      const opts = {
+        pageBreaks:  document.getElementById('opt-pagebreaks').checked,
+        code:        document.getElementById('opt-code').checked,
+        blockquotes: document.getElementById('opt-blockquotes').checked,
+      };
       try {
-        setProgress(10, 'Preparing...');
-        const blob = await generateDocx(md, { pageBreaks: document.getElementById('opt-pagebreaks').checked, code: document.getElementById('opt-code').checked, blockquotes: document.getElementById('opt-blockquotes').checked }, document.getElementById('opt-template').value);
-        downloadUrl = URL.createObjectURL(blob); downloadBtn.href = downloadUrl; downloadBtn.download = filename; downloadBtn.classList.add('visible');
+        if (currentFormat === 'pdf') {
+          setProgress(10, 'Generating PDF...');
+          log('  - Building PDF layout...', 'info');
+          _pdfBlob = await generatePdf(md, opts);
+          setProgress(80, 'Finalising PDF...');
+          log('  - PDF complete.', 'info');
+          document.getElementById('download-pdf-btn').classList.add('visible');
+          document.getElementById('download-btn').classList.remove('visible');
+        } else {
+          setProgress(10, 'Preparing...');
+          const blob = await generateDocx(md, opts, document.getElementById('opt-template').value);
+          const filename = baseFilename + '.docx';
+          if (downloadUrl) URL.revokeObjectURL(downloadUrl);
+          downloadUrl = URL.createObjectURL(blob);
+          downloadBtn.href = downloadUrl; downloadBtn.download = filename;
+          downloadBtn.classList.add('visible');
+          document.getElementById('download-pdf-btn').classList.remove('visible');
+        }
         setProgress(100, 'Complete ✓'); setStatus('done'); log('Done!', 'success');
+        showToast(currentFormat === 'pdf' ? 'PDF ready!' : 'DOCX ready!', 'success');
       } catch (err) {
         setStatus('error'); log('ERROR: ' + err.message, 'err'); showToast('Error: ' + err.message, 'err');
       } finally { convertBtn.disabled = false; }
