@@ -52,7 +52,7 @@ The new **output format switcher** lets you choose between DOCX and PDF before c
 
 > **v2.5.1 resolves DOCX file corruption errors in Microsoft Word.**
 
-Previously, the generated DOCX files were missing specific XML namespaces (`w14`, `w15`) and extended properties (`app.xml`) required by modern versions of Microsoft Word (2010, 2013, Office 365). 
+Previously, the generated DOCX files were missing specific XML namespaces (`w14`, `w15`) and extended properties (`app.xml`) required by modern versions of Microsoft Word (2010, 2013, Office 365).
 
 - **100% Native MS Word Support** — The DOCX generation engine has been updated to strictly adhere to the `officeDocument` schema, ensuring files open flawlessly in Microsoft Word without triggering the "file is corrupt and cannot be opened" or "recovery" prompts.
 
