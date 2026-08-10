@@ -806,7 +806,7 @@
       display: flex;
       gap: 0;
       margin-bottom: 1rem;
-      border: 1px solid rgba(255,255,255,0.06);
+      border: 1px solid rgba(255, 255, 255, 0.06);
       border-radius: var(--radius);
       overflow: hidden;
     }
@@ -827,7 +827,7 @@
     }
 
     .format-tab:not(:last-child) {
-      border-right: 1px solid rgba(255,255,255,0.06);
+      border-right: 1px solid rgba(255, 255, 255, 0.06);
     }
 
     .format-tab.active {
@@ -1891,25 +1891,25 @@
 
       // ── Palette ──────────────────────────────────────────────
       const C = {
-        h1:    [26,  58, 107],   // deep navy
-        h2:    [46,  95, 168],
-        h3:    [68, 114, 196],
-        body:  [30,  30,  30],
-        dim:   [90,  90,  90],
-        code:  [50,  50,  50],
-        codeBg:[242, 242, 242],
+        h1: [26, 58, 107],   // deep navy
+        h2: [46, 95, 168],
+        h3: [68, 114, 196],
+        body: [30, 30, 30],
+        dim: [90, 90, 90],
+        code: [50, 50, 50],
+        codeBg: [242, 242, 242],
         quote: [100, 100, 100],
-        rule:  [180, 180, 180],
-        link:  [46,  95, 168],
-        accent:[212, 175,  55],
+        rule: [180, 180, 180],
+        link: [46, 95, 168],
+        accent: [212, 175, 55],
         white: [255, 255, 255],
-        headerBg:[26, 58, 107],
+        headerBg: [26, 58, 107],
       };
 
-      const PAGE_W  = doc.internal.pageSize.getWidth();   // 612 pt
-      const PAGE_H  = doc.internal.pageSize.getHeight();  // 792 pt
-      const MARGIN  = { top: 60, bottom: 50, left: 60, right: 60 };
-      const COL_W   = PAGE_W - MARGIN.left - MARGIN.right;
+      const PAGE_W = doc.internal.pageSize.getWidth();   // 612 pt
+      const PAGE_H = doc.internal.pageSize.getHeight();  // 792 pt
+      const MARGIN = { top: 60, bottom: 50, left: 60, right: 60 };
+      const COL_W = PAGE_W - MARGIN.left - MARGIN.right;
 
       let y = MARGIN.top;
 
@@ -1926,11 +1926,11 @@
         doc.setFontSize(size);
         doc.setTextColor(...colorArr);
         switch (style) {
-          case 'bold':       doc.setFont('helvetica', 'bold');       break;
-          case 'italic':     doc.setFont('helvetica', 'italic');     break;
+          case 'bold': doc.setFont('helvetica', 'bold'); break;
+          case 'italic': doc.setFont('helvetica', 'italic'); break;
           case 'bolditalic': doc.setFont('helvetica', 'bolditalic'); break;
-          case 'mono':       doc.setFont('courier',   'normal');     break;
-          default:           doc.setFont('helvetica', 'normal');     break;
+          case 'mono': doc.setFont('courier', 'normal'); break;
+          default: doc.setFont('helvetica', 'normal'); break;
         }
       }
 
@@ -1940,14 +1940,14 @@
         const segs = [];
         let rem = raw;
         const patterns = [
-          { re: /\*\*\*(.+?)\*\*\*/,  style: 'bolditalic', color: C.body },
-          { re: /___(.+?)___/,        style: 'bolditalic', color: C.body },
-          { re: /\*\*(.+?)\*\*/,      style: 'bold',       color: C.body },
-          { re: /__(.+?)__/,          style: 'bold',       color: C.body },
-          { re: /\*(.+?)\*/,          style: 'italic',     color: C.body },
-          { re: /_(.+?)_/,            style: 'italic',     color: C.body },
-          { re: /~~(.+?)~~/,          style: 'strike',     color: C.dim  },
-          { re: /`([^`]+)`/,          style: 'mono',       color: C.code },
+          { re: /\*\*\*(.+?)\*\*\*/, style: 'bolditalic', color: C.body },
+          { re: /___(.+?)___/, style: 'bolditalic', color: C.body },
+          { re: /\*\*(.+?)\*\*/, style: 'bold', color: C.body },
+          { re: /__(.+?)__/, style: 'bold', color: C.body },
+          { re: /\*(.+?)\*/, style: 'italic', color: C.body },
+          { re: /_(.+?)_/, style: 'italic', color: C.body },
+          { re: /~~(.+?)~~/, style: 'strike', color: C.dim },
+          { re: /`([^`]+)`/, style: 'mono', color: C.code },
           { re: /\[([^\]]+)\]\(([^)]+)\)/, style: 'link', color: C.link },
         ];
         while (rem.length > 0) {
@@ -1993,7 +1993,7 @@
             }
             const curLine = lines[lines.length - 1];
             if (curLine.length > 0 && curLine[curLine.length - 1].style === seg.style &&
-                curLine[curLine.length - 1].color === seg.color) {
+              curLine[curLine.length - 1].color === seg.color) {
               curLine[curLine.length - 1].text += word;
             } else {
               curLine.push({ ...seg, text: word });
@@ -2046,8 +2046,8 @@
         doc.setFontSize(9); doc.setFont('helvetica', 'bold');
         doc.setTextColor(...C.accent);
         doc.text('MD2DOCX', MARGIN.left, 22);
-        doc.setFont('helvetica', 'normal'); doc.setTextColor(...[200,200,200]);
-        const ts = new Date().toLocaleDateString('en-US', { year:'numeric', month:'short', day:'numeric' });
+        doc.setFont('helvetica', 'normal'); doc.setTextColor(...[200, 200, 200]);
+        const ts = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
         doc.text(ts, PAGE_W - MARGIN.right - doc.getTextWidth(ts), 22);
         doc.setDrawColor(...C.accent); doc.setLineWidth(0.8);
         doc.line(MARGIN.left, 34, PAGE_W - MARGIN.right, 34);
@@ -2092,10 +2092,10 @@
         const hm = line.match(/^(#{1,6})\s+(.*)/);
         if (hm) {
           const lvl = hm[1].length;
-          const sizes  = [26, 20, 16, 14, 12, 11];
+          const sizes = [26, 20, 16, 14, 12, 11];
           const colors = [C.h1, C.h2, C.h3, C.body, C.body, C.body];
           const lineHs = [36, 28, 24, 20, 18, 16];
-          const pads   = [14, 10,  8,  6,  4,  4];
+          const pads = [14, 10, 8, 6, 4, 4];
           const sz = sizes[lvl - 1];
           const cl = colors[lvl - 1];
           const lh = lineHs[lvl - 1];
@@ -2402,8 +2402,8 @@
       const baseFilename = document.getElementById('opt-filename').value.trim() ||
         (currentFile ? currentFile.name.replace(/\.(md|txt)$/i, '') : 'doc');
       const opts = {
-        pageBreaks:  document.getElementById('opt-pagebreaks').checked,
-        code:        document.getElementById('opt-code').checked,
+        pageBreaks: document.getElementById('opt-pagebreaks').checked,
+        code: document.getElementById('opt-code').checked,
         blockquotes: document.getElementById('opt-blockquotes').checked,
       };
       try {

@@ -52,6 +52,7 @@ The new **output format switcher** lets you choose between DOCX and PDF before c
 ### Core Conversion
 
 - **Dual Output Formats** — Export to `.docx` (Microsoft Word) **or** `.pdf` with one click
+- **Strict MS Word Compatibility** — Generated DOCX files open perfectly in Microsoft Word 2010+ and Office 365 without recovery prompts
 - **Full Markdown Parsing** — Headings H1–H6, bold, italic, strikethrough, inline code, links
 - **Code Blocks** — Fenced blocks with monospace rendering and language label support
 - **Tables** — Full GFM table support with header styling and alternating row shading
